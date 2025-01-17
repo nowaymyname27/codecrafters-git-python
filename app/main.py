@@ -92,9 +92,71 @@ def ls_tree():
     for name in sorted(entries):
         print(name)
 
+def write_tree(directory="."):
+    entries = []
+
+    # 1. Scan directory contents
+    for item in sorted(os.listdir(directory)):
+        if item == ".git":
+            continue  # Skip the .git directory
+
+        path = os.path.join(directory, item)
+
+        # 2. Handle files (create blob objects)
+        if os.path.isfile(path):
+            with open(path, "rb") as file:
+                content = file.read()
+
+            # Create blob: "blob <size>\0<content>"
+            blob_header = f"blob {len(content)}\0".encode()
+            blob_data = blob_header + content
+
+            # SHA-1 hash and write the blob
+            blob_hash = hashlib.sha1(blob_data).hexdigest()
+            dir_name = f".git/objects/{blob_hash[:2]}"
+            file_name = blob_hash[2:]
+            os.makedirs(dir_name, exist_ok=True)
+
+            # Compress and store blob
+            compressed_blob = zlib.compress(blob_data)
+            with open(f"{dir_name}/{file_name}", "wb") as f:
+                f.write(compressed_blob)
+
+            # Add file entry to the tree (mode 100644 for files)
+            entry = f"100644 {item}".encode() + b"\0" + bytes.fromhex(blob_hash)
+            entries.append(entry)
+
+        # 3. Handle directories (create tree objects recursively)
+        elif os.path.isdir(path):
+            subtree_hash = write_tree(path)  # Recursive call
+
+            # Add directory entry to the tree (mode 40000 for directories)
+            entry = f"40000 {item}".encode() + b"\0" + bytes.fromhex(subtree_hash)
+            entries.append(entry)
+
+    # 4. Create the tree object
+    tree_data = b"".join(entries)
+    tree_header = f"tree {len(tree_data)}\0".encode()
+    store_data = tree_header + tree_data
+
+    # 5. Compute SHA-1 hash for the tree object
+    tree_hash = hashlib.sha1(store_data).hexdigest()
+
+    # 6. Write the tree object to .git/objects
+    dir_name = f".git/objects/{tree_hash[:2]}"
+    file_name = tree_hash[2:]
+    os.makedirs(dir_name, exist_ok=True)
+
+    compressed_tree = zlib.compress(store_data)
+    with open(f"{dir_name}/{file_name}", "wb") as f:
+        f.write(compressed_tree)
+
+    # 7. Return the tree SHA-1 hash
+    return tree_hash
+
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!", file=sys.stderr)
+    print("Logs from your program will appear here!\n", file=sys.stderr)
 
     command = sys.argv[1]
     if command == "init":
@@ -105,6 +167,9 @@ def main():
         hash_object()
     elif command == "ls-tree":
         ls_tree()
+    elif command == "write-tree":
+        tree_hash = write_tree()
+        print(tree_hash)
     else:
         raise RuntimeError(f"Unknown command #{command}")
 
