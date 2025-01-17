@@ -54,6 +54,44 @@ def hash_object():
     # 8. Print the SHA-1 hash
     print(sha1_hash)
 
+def ls_tree():
+    if sys.argv[2] != "--name-only":
+        raise RuntimeError("Missing '--name-only' flag")
+
+    tree_sha = sys.argv[3]
+    object_path = f".git/objects/{tree_sha[:2]}/{tree_sha[2:]}"
+
+    # 1. Read and decompress the tree object
+    with open(object_path, "rb") as file:
+        raw = zlib.decompress(file.read())
+
+    # 2. Skip the header ("tree <size>\0")
+    _, content = raw.split(b"\0", maxsplit=1)
+
+    entries = []
+
+    # 3. Parse each entry: <mode> <name>\0<20-byte SHA>
+    i = 0
+    while i < len(content):
+        # Extract mode (file type) and name
+        mode_end = content.find(b" ", i)
+        mode = content[i:mode_end].decode()
+
+        name_end = content.find(b"\0", mode_end)
+        name = content[mode_end + 1:name_end].decode()
+
+        # Extract the 20-byte SHA (raw bytes)
+        sha = content[name_end + 1:name_end + 21]
+
+        entries.append(name)
+
+        # Move to the next entry
+        i = name_end + 21
+
+    # 4. Print sorted names
+    for name in sorted(entries):
+        print(name)
+
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!", file=sys.stderr)
@@ -65,9 +103,10 @@ def main():
         cat_file()
     elif command == "hash-object":
         hash_object()
+    elif command == "ls-tree":
+        ls_tree()
     else:
         raise RuntimeError(f"Unknown command #{command}")
-
 
 
 if __name__ == "__main__":
