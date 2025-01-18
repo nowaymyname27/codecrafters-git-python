@@ -2,6 +2,7 @@ import sys
 import os
 import zlib
 import hashlib
+import time
 
 def init():
     os.mkdir(".git")
@@ -154,6 +155,64 @@ def write_tree(directory="."):
     # 7. Return the tree SHA-1 hash
     return tree_hash
 
+def commit_tree():
+    # 1. Parse arguments
+    tree_sha = sys.argv[2]
+    parent_sha = None
+    message = ""
+
+    # Handle optional parent (-p) and message (-m)
+    if "-p" in sys.argv:
+        parent_index = sys.argv.index("-p")
+        parent_sha = sys.argv[parent_index + 1]
+
+    if "-m" in sys.argv:
+        message_index = sys.argv.index("-m")
+        message = sys.argv[message_index + 1]
+
+    # Ensure the message ends with a newline
+    if not message.endswith("\n"):
+        message += "\n"
+
+    # 2. Author/Committer details (hardcoded)
+    author = "Your Name <you@example.com>"
+    timestamp = int(time.time())
+    timezone = time.strftime('%z')
+
+    # 3. Build the commit content
+    commit_lines = [
+        f"tree {tree_sha}"
+    ]
+
+    if parent_sha:
+        commit_lines.append(f"parent {parent_sha}")
+
+    commit_lines.append(f"author {author} {timestamp} {timezone}")
+    commit_lines.append(f"committer {author} {timestamp} {timezone}")
+    commit_lines.append("")  # Empty line before the message
+    commit_lines.append(message)
+
+    commit_content = "\n".join(commit_lines).encode()
+
+    # 4. Create the commit header
+    header = f"commit {len(commit_content)}\0".encode()
+    store_data = header + commit_content
+
+    # 5. Compute SHA-1 hash
+    commit_hash = hashlib.sha1(store_data).hexdigest()
+
+    # 6. Write the commit object
+    dir_name = f".git/objects/{commit_hash[:2]}"
+    file_name = commit_hash[2:]
+    os.makedirs(dir_name, exist_ok=True)
+
+    compressed_commit = zlib.compress(store_data)
+    with open(f"{dir_name}/{file_name}", "wb") as f:
+        f.write(compressed_commit)
+
+    # 7. Print the commit SHA
+    print(commit_hash)
+
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!\n", file=sys.stderr)
@@ -170,6 +229,8 @@ def main():
     elif command == "write-tree":
         tree_hash = write_tree()
         print(tree_hash)
+    elif command == "commit-tree":
+        commit_tree()
     else:
         raise RuntimeError(f"Unknown command #{command}")
 
